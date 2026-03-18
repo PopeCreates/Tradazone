@@ -105,18 +105,31 @@ export function AuthProvider({ children }) {
             const { connect } = await import('get-starknet');
             const starknet = await connect();
 
-            if (!starknet) throw new Error('No wallet selected');
-            
-            // For v3 of get-starknet we just use the connect() method which returns the selected connection
-            const isPreauthorized = await starknet.isPreauthorized();
-            if (!isPreauthorized) {
-                await starknet.enable({ starknetVersion: "v4" }).catch(() => {
-                     // try v3 as fallback
-                     return starknet.enable();
-                });
+            if (!starknet) {
+                // Try specific ArgentX provider if generic connect fails to pick it up
+                if (window.starknet_argentX) {
+                    await window.starknet_argentX.enable();
+                    if (window.starknet_argentX.isConnected) {
+                        starknet = window.starknet_argentX;
+                    } else {
+                        throw new Error('No wallet selected');
+                    }
+                } else {
+                    throw new Error('No wallet selected');
+                }
+            } else {
+                // Standard get-starknet flow
+                const isPreauthorized = await starknet.isPreauthorized();
+                if (!isPreauthorized) {
+                    try {
+                        await starknet.enable({ starknetVersion: "v4" });
+                    } catch (e) {
+                        await starknet.enable();
+                    }
+                }
             }
 
-            if (starknet.isConnected) {
+            if (starknet && starknet.isConnected) {
                 const addr = starknet.selectedAddress;
 
                 const walletState = { address: addr, isConnected: true, chainId: starknet.chainId, balance: '0', currency: 'STRK' };
